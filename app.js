@@ -1,0 +1,22 @@
+(()=>{"use strict";
+const S={objects:[],selected:null,history:[],plan:null,scale:null};
+const stage=document.querySelector("#stage"),plan=document.querySelector("#plan"),empty=document.querySelector("#empty"),status=document.querySelector("#status");
+const snap=()=>JSON.stringify({objects:S.objects,selected:S.selected,scale:S.scale});
+function push(){S.history.push(snap());if(S.history.length>50)S.history.shift()}
+function next(type){let p=type==="camera"?"K":type==="switch"?"SW":"NVR",n=1;while(S.objects.some(o=>o.name===p+n))n++;return p+n}
+function add(type,x=.5,y=.5){push();const o={id:crypto.randomUUID(),type,name:next(type),x,y,rot:0,model:type==="camera"?"Ej vald":""};S.objects.push(o);S.selected=o.id;render()}
+function render(){stage.querySelectorAll(".obj,.label").forEach(e=>e.remove());for(const o of S.objects){let d=document.createElement("div");d.className="obj "+o.type+(o.id===S.selected?" selected":"");d.textContent=o.type==="camera"?o.name:o.type==="switch"?"SW":"NVR";d.style.left=o.x*100+"%";d.style.top=o.y*100+"%";d.dataset.id=o.id;stage.append(d);let l=document.createElement("div");l.className="label";l.textContent=o.name+(o.model&&o.model!=="Ej vald"?" · "+o.model:"");l.style.left=o.x*100+"%";l.style.top=o.y*100+"%";stage.append(l)}empty.style.display=(S.plan||S.objects.length)?"none":"grid";renderInspector();renderList();document.querySelector("#undoBtn").disabled=!S.history.length}
+function renderInspector(){const o=S.objects.find(x=>x.id===S.selected),el=document.querySelector("#inspector");if(!o){el.textContent="Välj ett objekt på ritningen.";return}el.innerHTML="<b>"+o.name+"</b><p>Typ: "+o.type+"</p>"+(o.type==="camera"?'<label>Modell<input id="modelInput" value="'+o.model.replaceAll('"',"&quot;")+'"></label><label>Rotation<input id="rotInput" type="range" min="0" max="359" value="'+o.rot+'"></label>':"");if(o.type==="camera"){document.querySelector("#modelInput").onchange=e=>{push();o.model=e.target.value;render()};document.querySelector("#rotInput").onchange=e=>{push();o.rot=+e.target.value;render()}}}
+function renderList(){document.querySelector("#camList").innerHTML=S.objects.filter(o=>o.type==="camera").map(o=>'<div class="row" data-sel="'+o.id+'"><b>'+o.name+"</b> · "+o.model+"</div>").join("")}
+stage.addEventListener("pointerdown",e=>{const d=e.target.closest(".obj");if(!d)return;S.selected=d.dataset.id;push();d.setPointerCapture(e.pointerId);const move=ev=>{const r=stage.getBoundingClientRect(),o=S.objects.find(x=>x.id===d.dataset.id);o.x=Math.max(0,Math.min(1,(ev.clientX-r.left)/r.width));o.y=Math.max(0,Math.min(1,(ev.clientY-r.top)/r.height));render()};d.onpointermove=move;d.onpointerup=()=>{d.onpointermove=null;render()};render()});
+stage.onclick=e=>{const d=e.target.closest(".obj");if(d){S.selected=d.dataset.id;render()}};
+document.querySelector("#camList").onclick=e=>{const r=e.target.closest("[data-sel]");if(r){S.selected=r.dataset.sel;render()}};
+document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>add(b.dataset.add,.5,.5));
+document.querySelector("#planBtn").onclick=()=>document.querySelector("#planFile").click();
+document.querySelector("#planFile").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{S.plan=rd.result;plan.src=S.plan;empty.style.display="none";status.textContent="Ritning laddad.";localStorage.setItem("cctvPlan",S.plan)};rd.readAsDataURL(f)};
+document.querySelector("#undoBtn").onclick=()=>{if(!S.history.length)return;const q=JSON.parse(S.history.pop());S.objects=q.objects;S.selected=q.selected;S.scale=q.scale;render()};
+document.querySelector("#newBtn").onclick=()=>{if(!confirm("Skapa nytt tomt projekt?"))return;push();S.objects=[];S.selected=null;S.plan=null;plan.removeAttribute("src");localStorage.removeItem("cctvPlan");render()};
+document.querySelector("#saveBtn").onclick=()=>{localStorage.setItem("cctvProject",JSON.stringify({objects:S.objects,scale:S.scale,name:document.querySelector("#projectName").value}));status.textContent="Projekt sparat lokalt."};
+document.querySelector("#scaleBtn").onclick=()=>{status.textContent="Tvåpunktskalibrering byggs i nästa version."};
+const saved=localStorage.getItem("cctvProject");if(saved){try{const q=JSON.parse(saved);S.objects=q.objects||[];S.scale=q.scale||null;document.querySelector("#projectName").value=q.name||"Testprojekt"}catch{}}const p=localStorage.getItem("cctvPlan");if(p){S.plan=p;plan.src=p}render();
+})();
