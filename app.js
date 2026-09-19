@@ -53,13 +53,19 @@ function pickExactCameraForK(spec){
  if(spec.mp){const exact=pool.filter(p=>Math.abs(cameraMP(p)-spec.mp)<.25);if(!exact.length)return null;pool=exact}
  return pool[0]||null;
 }
+function ensureNetworkObjects(){
+ const cams=S.objects.filter(o=>o.type==="camera");let nvr=S.objects.find(o=>o.type==="nvr"),sw=S.objects.find(o=>o.type==="switch"),created=[];
+ if(!nvr&&cams.length){nvr={id:crypto.randomUUID(),type:"nvr",name:next("nvr"),x:.5,y:.5,rot:0,range:.22,model:""};S.objects.push(nvr);created.push(nvr.name)}
+ if(!sw&&cams.length){let ax=nvr?nvr.x:.5,ay=nvr?nvr.y:.5,cx=cams.reduce((q,o)=>q+o.x,0)/cams.length,cy=cams.reduce((q,o)=>q+o.y,0)/cams.length;sw={id:crypto.randomUUID(),type:"switch",name:next("switch"),x:(ax+cx)/2,y:(ay+cy)/2,rot:0,range:.22,model:""};S.objects.push(sw);created.push(sw.name)}
+ return created;
+}
 function buildV18Topology(){
- const nvrs=S.objects.filter(o=>o.type==="nvr"),sws=S.objects.filter(o=>o.type==="switch"),cams=S.objects.filter(o=>o.type==="camera");
- if(!nvrs.length)return{error:"NVR saknas."};if(!sws.length)return{error:"Switch saknas."};if(!cams.length)return{error:"Kameror saknas."};
+ const created=ensureNetworkObjects(),nvrs=S.objects.filter(o=>o.type==="nvr"),sws=S.objects.filter(o=>o.type==="switch"),cams=S.objects.filter(o=>o.type==="camera");
+ if(!nvrs.length)return{error:"NVR saknas."};if(!sws.length)return{error:"Switch kunde inte skapas."};if(!cams.length)return{error:"Kameror saknas."};
  const links=[],remaining=[...sws];let prev=nvrs[0],n=1;
  while(remaining.length){remaining.sort((a,b)=>Math.hypot(a.x-prev.x,a.y-prev.y)-Math.hypot(b.x-prev.x,b.y-prev.y));let sw=remaining.shift();links.push({id:"c"+Date.now()+"_"+n++,from:prev.id,to:sw.id,label:(prev.name||"NVR")+" → "+sw.name,kind:"uplink"});prev=sw}
  for(const cam of cams){let sw=[...sws].sort((a,b)=>Math.hypot(a.x-cam.x,a.y-cam.y)-Math.hypot(b.x-cam.x,b.y-cam.y))[0];links.push({id:"c"+Date.now()+"_"+n++,from:sw.id,to:cam.id,label:sw.name+" → "+cam.name,kind:"camera"})}
- S.cables=links;return{links};
+ S.cables=links;return{links,created};
 }
 function compact(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
 function findEquipmentModel(type,text){
@@ -79,7 +85,7 @@ function isEquipmentInstruction(t,type){return type==="nvr"?/\bnvr\b|inspelare|r
 function isNetworkInstruction(t){return /(?:nätverkskabel|cat6|kabel|koppla|anslut)/i.test(t)&&/(?:nvr|switch)/i.test(t)}
 function runAI(){
  const txt=$("#aiPrompt").value.trim();if(!txt){status.textContent="Beskriv vad AI ska göra.";return}
- if(isNetworkInstruction(txt)){push();let msgs=[];if(isEquipmentInstruction(txt,"nvr")){let a=assignEquipmentFromText("nvr",txt);if(a.changed)msgs.push(a.target.name+" → "+a.product.model)}if(isEquipmentInstruction(txt,"switch")){let a=assignEquipmentFromText("switch",txt);if(a.changed)msgs.push(a.target.name+" → "+a.product.model)}const topo=buildV18Topology();if(topo.error){status.textContent="AI stoppad: "+topo.error;return}status.textContent=(msgs.length?msgs.join(" · ")+" · ":"")+"Nätverk skapat: NVR → switch → kameror. "+topo.links.length+" länkar.";render();return}
+ if(isNetworkInstruction(txt)){push();let msgs=[];if(isEquipmentInstruction(txt,"nvr")){let a=assignEquipmentFromText("nvr",txt);if(a.changed)msgs.push(a.target.name+" → "+a.product.model)}if(isEquipmentInstruction(txt,"switch")){let a=assignEquipmentFromText("switch",txt);if(a.changed)msgs.push(a.target.name+" → "+a.product.model)}const topo=buildV18Topology();if(topo.error){status.textContent="AI stoppad: "+topo.error;return}status.textContent=(msgs.length?msgs.join(" · ")+" · ":"")+(topo.created&&topo.created.length?"AI skapade "+topo.created.join(", ")+" eftersom den saknades. ":"")+"Nätverk skapat: NVR → switch → kameror. "+topo.links.length+" länkar.";render();return}
  if(isEquipmentInstruction(txt,"nvr")){push();let a=assignEquipmentFromText("nvr",txt);status.textContent=a.error||a.target.name+" → "+a.product.model;render();return}
  if(isEquipmentInstruction(txt,"switch")){push();let a=assignEquipmentFromText("switch",txt);status.textContent=a.error||a.target.name+" → "+a.product.model;render();return}
  const registry=S.objects.filter(x=>x.type==="camera"),plan=buildLockedKPlan(txt,registry);
