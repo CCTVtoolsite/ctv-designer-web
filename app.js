@@ -11,9 +11,58 @@ function data(){return {version:8,name:$("#projectName").value,objects:S.objects
 $("#saveBtn").onclick=()=>{localStorage.setItem("cctvProject",JSON.stringify(data()));status.textContent="Projekt sparat lokalt."};$("#loadBtn").onclick=()=>{let x=localStorage.getItem("cctvProject");if(!x)return status.textContent="Inget sparat projekt hittades.";try{load(JSON.parse(x));status.textContent="Sparat projekt laddat."}catch{status.textContent="Kunde inte läsa projektet."}};
 $("#exportBtn").onclick=()=>{let b=new Blob([JSON.stringify(data(),null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=($("#projectName").value||"cctv-project").replace(/[^a-z0-9_-]/gi,"_")+".json";a.click();URL.revokeObjectURL(a.href)};$("#importBtn").onclick=()=>$("#importFile").click();$("#importFile").onchange=e=>{let f=e.target.files[0];if(!f)return;let rd=new FileReader();rd.onload=()=>{try{load(JSON.parse(rd.result));status.textContent="Projekt importerat."}catch{status.textContent="Ogiltig projektfil."}};rd.readAsText(f)};
 $("#undoBtn").onclick=()=>{if(!S.history.length)return;let q=JSON.parse(S.history.pop());S.objects=q.objects;S.selected=q.selected;S.scale=q.scale;render()};$("#newBtn").onclick=()=>{if(!confirm("Skapa nytt tomt projekt?"))return;S.objects=[];S.selected=null;S.plan=null;plan.removeAttribute("src");render()};$("#scaleBtn").onclick=()=>status.textContent="Tvåpunktskalibrering är nästa steg.";
-function norm(v){return v.toLowerCase().replace(/axis\s+/g,"").replace(/[^a-z0-9]/g,"")}
-function findCameraModel(text){let n=norm(text),best=null;for(const c of CAT.cameras){let cm=norm(c.model);if(n.includes(cm)||cm.includes(n)){if(!best||cm.length>norm(best.model).length)best=c}}return best}
-function expandK(expr){let out=[];expr=expr.toUpperCase().replace(/\s+/g,"");for(const part of expr.split(",")){let m=part.match(/^K(\d+)-K?(\d+)$/);if(m){for(let n=+m[1];n<=+m[2];n++)out.push("K"+n)}else if(/^K\d+$/.test(part))out.push(part)}return out}
-function runAI(){let t=$("#aiPrompt").value.trim();if(!t)return;push();let changed=0,errors=[];let clauses=t.split(/[.;\n]+/).map(x=>x.trim()).filter(Boolean);for(let clause of clauses){let km=clause.match(/((?:K\d+\s*(?:,|och|-)?\s*)+)/i);if(!km)continue;let ids=expandK(km[1].replace(/\boch\b/gi,","));let model=findCameraModel(clause);if(!model){errors.push(ids.join(",")+": kameramodell hittades inte");continue}for(let id of ids){let o=S.objects.find(x=>x.type==="camera"&&x.name.toUpperCase()===id);if(!o){errors.push(id+" finns inte");continue}o.model=model.model;changed++}let rr=clause.match(/(\d{1,3})\s*(?:°|grader)/i);if(rr)for(let id of ids){let o=S.objects.find(x=>x.type==="camera"&&x.name.toUpperCase()===id);if(o){o.rot=(+rr[1])%360;changed++}}}status.textContent=errors.length?((changed?changed+" ändring(ar). ":"")+errors.join(" · ")):changed?changed+" ändring(ar) utförda. K-positionerna är oförändrade.":"Ingen säker K/modell-instruktion hittades.";render()}$("#aiBtn").onclick=runAI;
+function expandKRefs(text){
+ const ids=new Set(),t=String(text||"").toLowerCase();
+ for(const m of t.matchAll(/\\bk(\\d+)\\s*[-–]\\s*k?(\\d+)\\b/g)){let a=+m[1],b=+m[2];if(a>b)[a,b]=[b,a];if(b-a>63)continue;for(let n=a;n<=b;n++)ids.add("K"+n)}
+ for(const m of t.matchAll(/\\bk(\\d+)\\b/g))ids.add("K"+(+m[1]));
+ return [...ids];
+}
+function clauseCameraSpec(clause){
+ const c=String(clause||"").toLowerCase();
+ const brand=(c.match(/\\b(axis|hikvision|dahua|ajax)\\b/)||[])[1]||null;
+ const mp=(c.match(/\\b(\\d{1,2})\\s*mp\\b/)||[])[1];
+ let model=null;
+ const modelPatterns=[/\\b(p\\d{4}[a-z0-9-]*)\\b/i,/\\b(m\\d{4}[a-z0-9-]*)\\b/i,/\\b(q\\d{4}[a-z0-9-]*)\\b/i,/\\b(ds-[a-z0-9-]+)\\b/i,/\\b(ipc-[a-z0-9-]+)\\b/i];
+ for(const rx of modelPatterns){const mm=c.match(rx);if(mm){model=mm[1];break}}
+ return{brand,mp:mp?+mp:null,model,panoramic:/\\b360\\b|fisheye|panorama/.test(c)};
+}
+function cameraMP(p){let r=String(p.resolution||"").match(/(\\d+(?:\\.\\d+)?)\\s*MP/i);if(r)return +r[1];if(/4K/i.test(String(p.resolution||"")))return 8;return 0}
+function is360Product(p){return !!(p.panoramic||p.coverage360||/fisheye|360|panoramic/i.test(String(p.type||"")+" "+String(p.fov||"")+" "+String(p.model||"")))}
+function splitLockedKClauses(raw){
+ let t=String(raw||"").replace(/\\s+/g," ").trim();
+ t=t.replace(/([,;.]\\s*)(?=k\\d+\\b)/gi,"§");
+ t=t.replace(/\\s+\\b(?:och|samt)\\s+(?=k\\d+\\b)/gi,"§");
+ return t.split(/§|[;\\n]+/).map(x=>x.trim()).filter(Boolean);
+}
+function buildLockedKPlan(raw,kObjects){
+ const existing=new Map(kObjects.map(o=>[String(o.name||"").toUpperCase(),o])),assignments=new Map(),errors=[];
+ for(const clause of splitLockedKClauses(raw)){
+   const refs=expandKRefs(clause);if(!refs.length)continue;
+   const spec=clauseCameraSpec(clause),meaningful=!!(spec.brand||spec.model||spec.mp||spec.panoramic);
+   if(!meaningful)continue;
+   for(const id of refs){if(!existing.has(id)){errors.push(id+" finns inte i projektet");continue}assignments.set(id,spec)}
+ }
+ return{assignments,errors};
+}
+function pickExactCameraForK(spec){
+ let pool=CAT.cameras.filter(p=>!spec.brand||String(p.brand||"").toLowerCase()===spec.brand.toLowerCase());
+ if(spec.model){const key=spec.model.toLowerCase().replace(/[^a-z0-9]/g,"");const exact=pool.filter(p=>String(p.model||"").toLowerCase().replace(/[^a-z0-9]/g,"").includes(key));if(exact.length)return exact[0];return null}
+ pool=pool.filter(p=>spec.panoramic?is360Product(p):!is360Product(p));
+ if(spec.mp){const exact=pool.filter(p=>Math.abs(cameraMP(p)-spec.mp)<.25);if(!exact.length)return null;pool=exact}
+ return pool[0]||null;
+}
+function runAI(){
+ const txt=$("#aiPrompt").value.trim();if(!txt){status.textContent="Beskriv K-tilldelningarna.";return}
+ const registry=S.objects.filter(x=>x.type==="camera"),plan=buildLockedKPlan(txt,registry);
+ if(plan.errors.length){status.textContent="AI stoppad: "+plan.errors.join(" · ");return}
+ if(!plan.assignments.size){status.textContent="Ingen K-tilldelning hittades. Ex: K1,K2,K3 Axis 360. K4,K5 Axis P3278.";return}
+ const planned=[];
+ for(const [kid,spec] of plan.assignments){const o=registry.find(x=>String(x.name).toUpperCase()===kid),p=pickExactCameraForK(spec);if(!p){status.textContent="AI stoppad: ingen exakt katalogmatch för "+kid+(spec.model?" modell "+spec.model:"")+(spec.brand?" "+spec.brand:"")+(spec.panoramic?" 360°":"")+". Inget ändrades.";return}planned.push({o,p,spec})}
+ push();
+ for(const x of planned){x.o.model=x.p.model;if(x.spec.panoramic)x.o.rot=0}
+ status.textContent="K-tilldelning verifierad: "+planned.map(x=>x.o.name+" → "+x.o.model).join(" · ")+". Positionerna ändrades inte.";
+ render();
+}
+$("#aiBtn").onclick=runAI;
 let saved=localStorage.getItem("cctvProject");if(saved)try{load(JSON.parse(saved))}catch{}else{let p=localStorage.getItem("cctvPlan");if(p){S.plan=p;plan.src=p}render()}
 })();
