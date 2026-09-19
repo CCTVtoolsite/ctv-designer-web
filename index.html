@@ -1,9 +1,9 @@
-<!doctype html><html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CCTV Designer Web</title><link rel="stylesheet" href="styles.css?v=8"></head><body>
-<header><div><b>CCTV Designer</b><span> WEB V0.8</span></div><div class="actions"><button id="newBtn">Nytt</button><button id="undoBtn">↶ Ångra</button><button id="saveBtn">Spara</button><button id="loadBtn">Ladda sparat</button><button id="exportBtn">Exportera</button><button id="importBtn">Importera</button><input id="importFile" type="file" accept=".json" hidden></div></header>
+<!doctype html><html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CCTV Designer Web</title><link rel="stylesheet" href="styles.css?v=9"></head><body>
+<header><div><b>CCTV Designer</b><span> WEB V0.9</span></div><div class="actions"><button id="newBtn">Nytt</button><button id="undoBtn">↶ Ångra</button><button id="saveBtn">Spara</button><button id="loadBtn">Ladda sparat</button><button id="exportBtn">Exportera</button><button id="importBtn">Importera</button><input id="importFile" type="file" accept=".json" hidden></div></header>
 <main><aside><h3>PROJEKT</h3><label>Namn<input id="projectName" value="Testprojekt"></label><button id="planBtn">Ladda ritning</button><input id="planFile" type="file" accept="image/*" hidden>
 <h3>PLACERA</h3><div class="palette"><button data-add="camera">📷 Kamera K</button><button data-add="switch">▣ Switch</button><button data-add="nvr">▰ NVR</button></div>
 <h3>AI SECURITY DESIGNER</h3><textarea id="aiPrompt" rows="5" placeholder="Ex: K1,K2,K3 Axis P3278-LVE. K4 Ajax TurretCam. Rotera K1 90 grader."></textarea><button id="aiBtn">Kör instruktion</button><small>Första lokala V18-kommandomotorn. Riktig AI kopplas in efter stabil grund.</small>
 <h3>SKALA</h3><p id="scaleStatus">Ej kalibrerad</p><button id="scaleBtn">Kalibrera 2 punkter</button><h3>STATUS</h3><p id="status">Redo.</p></aside>
 <section class="stageWrap"><div id="stage"><img id="plan"><svg id="overlay"></svg><div id="empty">Ladda en ritning och placera K1, K2…</div></div></section>
 <aside class="right"><h3>VALT OBJEKT</h3><div id="inspector">Välj ett objekt på ritningen.</div><h3>OBJEKTLISTA</h3><div id="camList"></div></aside></main>
-<script src="catalog.js?v=8"></script><script src="app.js?v=8"></script></body></html>
+<script src="catalog.js?v=9"></script><script src="app.js?v=9"></script></body></html>
