@@ -61,10 +61,27 @@ function buildV18Topology(){
  for(const cam of cams){let sw=[...sws].sort((a,b)=>Math.hypot(a.x-cam.x,a.y-cam.y)-Math.hypot(b.x-cam.x,b.y-cam.y))[0];links.push({id:"c"+Date.now()+"_"+n++,from:sw.id,to:cam.id,label:sw.name+" → "+cam.name,kind:"camera"})}
  S.cables=links;return{links};
 }
+function compact(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
+function findEquipmentModel(type,text){
+ const arr=models(type),t=compact(text),brand=(String(text).match(/\b(axis|hikvision|dahua|ajax)\b/i)||[])[1];
+ let pool=brand?arr.filter(p=>String(p.brand||"").toLowerCase()===brand.toLowerCase()):arr;
+ let best=null,score=0;
+ for(const p of pool){let pm=compact(p.model),tokens=String(p.model).toLowerCase().match(/[a-z]*\d+[a-z0-9-]*/g)||[];for(const token of tokens){let k=compact(token);if(k.length>=4&&t.includes(k)&&k.length>score){best=p;score=k.length}}}
+ return best;
+}
+function assignEquipmentFromText(type,text){
+ const objs=S.objects.filter(o=>o.type===type);if(!objs.length)return{changed:0,error:(type==="nvr"?"NVR":"switch")+" saknas i projektet."};
+ const p=findEquipmentModel(type,text);if(!p)return{changed:0,error:"Ingen säker "+type+"-modell hittades i katalogen."};
+ let target=objs[0],m=String(text).match(new RegExp("\\b"+(type==="nvr"?"NVR":"SW")+"(\\d+)\\b","i"));if(m){let q=objs.find(o=>o.name.toUpperCase()===(type==="nvr"?"NVR":"SW")+m[1]);if(q)target=q}
+ target.model=p.model;return{changed:1,target,product:p};
+}
+function isEquipmentInstruction(t,type){return type==="nvr"?/\bnvr\b|inspelare|recorder/i.test(t):/\bsw(?:itch)?\b|switch/i.test(t)}
 function isNetworkInstruction(t){return /(?:nätverkskabel|cat6|kabel|koppla|anslut)/i.test(t)&&/(?:nvr|switch)/i.test(t)}
 function runAI(){
  const txt=$("#aiPrompt").value.trim();if(!txt){status.textContent="Beskriv vad AI ska göra.";return}
- if(isNetworkInstruction(txt)){push();const topo=buildV18Topology();if(topo.error){status.textContent="AI stoppad: "+topo.error;return}status.textContent="Nätverk skapat enligt V18: NVR → switch → kameror. "+topo.links.length+" länkar.";render();return}
+ if(isNetworkInstruction(txt)){push();let msgs=[];if(isEquipmentInstruction(txt,"nvr")){let a=assignEquipmentFromText("nvr",txt);if(a.changed)msgs.push(a.target.name+" → "+a.product.model)}if(isEquipmentInstruction(txt,"switch")){let a=assignEquipmentFromText("switch",txt);if(a.changed)msgs.push(a.target.name+" → "+a.product.model)}const topo=buildV18Topology();if(topo.error){status.textContent="AI stoppad: "+topo.error;return}status.textContent=(msgs.length?msgs.join(" · ")+" · ":"")+"Nätverk skapat: NVR → switch → kameror. "+topo.links.length+" länkar.";render();return}
+ if(isEquipmentInstruction(txt,"nvr")){push();let a=assignEquipmentFromText("nvr",txt);status.textContent=a.error||a.target.name+" → "+a.product.model;render();return}
+ if(isEquipmentInstruction(txt,"switch")){push();let a=assignEquipmentFromText("switch",txt);status.textContent=a.error||a.target.name+" → "+a.product.model;render();return}
  const registry=S.objects.filter(x=>x.type==="camera"),plan=buildLockedKPlan(txt,registry);
  if(plan.errors.length){status.textContent="AI stoppad: "+plan.errors.join(" · ");return}
  if(!plan.assignments.size){status.textContent="Ingen K-tilldelning hittades. Ex: K1,K2,K3 Axis 360. K4,K5 Axis P3278.";return}
