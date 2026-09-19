@@ -13,26 +13,27 @@ $("#exportBtn").onclick=()=>{let b=new Blob([JSON.stringify(data(),null,2)],{typ
 $("#undoBtn").onclick=()=>{if(!S.history.length)return;let q=JSON.parse(S.history.pop());S.objects=q.objects;S.selected=q.selected;S.scale=q.scale;render()};$("#newBtn").onclick=()=>{if(!confirm("Skapa nytt tomt projekt?"))return;S.objects=[];S.selected=null;S.plan=null;plan.removeAttribute("src");render()};$("#scaleBtn").onclick=()=>status.textContent="Tvåpunktskalibrering är nästa steg.";
 function expandKRefs(text){
  const ids=new Set(),t=String(text||"").toLowerCase();
- for(const m of t.matchAll(/\\bk(\\d+)\\s*[-–]\\s*k?(\\d+)\\b/g)){let a=+m[1],b=+m[2];if(a>b)[a,b]=[b,a];if(b-a>63)continue;for(let n=a;n<=b;n++)ids.add("K"+n)}
- for(const m of t.matchAll(/\\bk(\\d+)\\b/g))ids.add("K"+(+m[1]));
+ for(const m of t.matchAll(/\bk(\d+)\s*[-–]\s*k?(\d+)\b/g)){let a=+m[1],b=+m[2];if(a>b)[a,b]=[b,a];if(b-a>63)continue;for(let n=a;n<=b;n++)ids.add("K"+n)}
+ for(const m of t.matchAll(/\bk(\d+)\b/g))ids.add("K"+(+m[1]));
  return [...ids];
 }
 function clauseCameraSpec(clause){
  const c=String(clause||"").toLowerCase();
- const brand=(c.match(/\\b(axis|hikvision|dahua|ajax)\\b/)||[])[1]||null;
- const mp=(c.match(/\\b(\\d{1,2})\\s*mp\\b/)||[])[1];
+ const brand=(c.match(/\b(axis|hikvision|dahua|ajax)\b/)||[])[1]||null;
+ const mp=(c.match(/\b(\d{1,2})\s*mp\b/)||[])[1];
  let model=null;
- const modelPatterns=[/\\b(p\\d{4}[a-z0-9-]*)\\b/i,/\\b(m\\d{4}[a-z0-9-]*)\\b/i,/\\b(q\\d{4}[a-z0-9-]*)\\b/i,/\\b(ds-[a-z0-9-]+)\\b/i,/\\b(ipc-[a-z0-9-]+)\\b/i];
+ const modelPatterns=[/\b(p\d{4}[a-z0-9-]*)\b/i,/\b(m\d{4}[a-z0-9-]*)\b/i,/\b(q\d{4}[a-z0-9-]*)\b/i,/\b(ds-[a-z0-9-]+)\b/i,/\b(ipc-[a-z0-9-]+)\b/i];
  for(const rx of modelPatterns){const mm=c.match(rx);if(mm){model=mm[1];break}}
- return{brand,mp:mp?+mp:null,model,panoramic:/\\b360\\b|fisheye|panorama/.test(c)};
+ return{brand,mp:mp?+mp:null,model,panoramic:/\b360\b|fisheye|panorama/.test(c)};
 }
-function cameraMP(p){let r=String(p.resolution||"").match(/(\\d+(?:\\.\\d+)?)\\s*MP/i);if(r)return +r[1];if(/4K/i.test(String(p.resolution||"")))return 8;return 0}
+function cameraMP(p){let r=String(p.resolution||"").match(/(\d+(?:\.\d+)?)\s*MP/i);if(r)return +r[1];if(/4K/i.test(String(p.resolution||"")))return 8;return 0}
 function is360Product(p){return !!(p.panoramic||p.coverage360||/fisheye|360|panoramic/i.test(String(p.type||"")+" "+String(p.fov||"")+" "+String(p.model||"")))}
 function splitLockedKClauses(raw){
- let t=String(raw||"").replace(/\\s+/g," ").trim();
- t=t.replace(/([,;.]\\s*)(?=k\\d+\\b)/gi,"§");
- t=t.replace(/\\s+\\b(?:och|samt)\\s+(?=k\\d+\\b)/gi,"§");
- return t.split(/§|[;\\n]+/).map(x=>x.trim()).filter(Boolean);
+ let t=String(raw||"").replace(/\s+/g," ").trim();
+ t=t.replace(/\b(k\d+)\s*,\s*(?=k\d+\b)/gi,"$1 ");
+ t=t.replace(/([,;.]\s*)(?=k\d+\b)/gi,"§");
+ t=t.replace(/\s+\b(?:och|samt)\s+(?=k\d+\b)/gi,"§");
+ return t.split(/§|[;\n]+/).map(x=>x.trim()).filter(Boolean);
 }
 function buildLockedKPlan(raw,kObjects){
  const existing=new Map(kObjects.map(o=>[String(o.name||"").toUpperCase(),o])),assignments=new Map(),errors=[];
